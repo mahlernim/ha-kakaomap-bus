@@ -6,7 +6,6 @@ from typing import Any
 
 import voluptuous as vol
 import aiohttp
-import async_timeout
 import homeassistant.helpers.config_validation as cv
 from homeassistant import config_entries
 from homeassistant.core import callback
@@ -21,31 +20,37 @@ _LOGGER = logging.getLogger(__name__)
 async def get_stop_info(stop_id: str) -> tuple[str, dict[str, str]] | None:
     """Get stop name and list of buses. Returns (stop_name, {bus_name: label})."""
     url = API_URL.format(stop_id)
+    timeout = aiohttp.ClientTimeout(total=10)
     try:
-        async with async_timeout.timeout(10):
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers={"User-Agent": "Mozilla/5.0"}) as response:
-                    if response.status != 200:
-                         return None
-                    text = await response.text()
-                    data = json.loads(text)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(url, headers={"User-Agent": "Mozilla/5.0"}) as response:
+                if response.status != 200:
+                    _LOGGER.error("API returned status %s for stop %s", response.status, stop_id)
+                    return None
+                text = await response.text()
+                data = json.loads(text)
+                
+                if "lines" not in data:
+                    _LOGGER.error("No 'lines' key in API response for stop %s", stop_id)
+                    return None
                     
-                    if "lines" not in data:
-                        return None
-                        
-                    stop_name = data.get("name", stop_id)
-                        
-                    bus_dict = {}
-                    for line in data["lines"]:
-                        name = line.get("name")
-                        direction = line.get("arrival", {}).get("direction", "")
-                        if name:
-                            label = f"{name}"
-                            if direction:
-                                label += f" ({direction})"
-                            bus_dict[name] = label
-                    return stop_name, bus_dict
-    except Exception:
+                stop_name = data.get("name", stop_id)
+                    
+                bus_dict = {}
+                for line in data["lines"]:
+                    name = line.get("name")
+                    direction = line.get("arrival", {}).get("direction", "")
+                    if name:
+                        label = f"{name}"
+                        if direction:
+                            label += f" ({direction})"
+                        bus_dict[name] = label
+                return stop_name, bus_dict
+    except aiohttp.ClientError as err:
+        _LOGGER.error("Client error fetching stop %s: %s", stop_id, err)
+        return None
+    except Exception as err:
+        _LOGGER.exception("Unexpected error fetching stop %s: %s", stop_id, err)
         return None
 
 
