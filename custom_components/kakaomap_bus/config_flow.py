@@ -141,36 +141,44 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """Manage the options."""
         errors = {}
         
-        stop_id = self.config_entry.data[CONF_STOP_ID]
-        
-        # 1. Fetch latest "Available" buses
-        info = await get_stop_info(stop_id)
-        if info:
-             _, available_buses = info
-        else:
-             available_buses = {}
-             errors["base"] = "cannot_connect"
+        try:
+            stop_id = self.config_entry.data.get(CONF_STOP_ID)
+            if not stop_id:
+                _LOGGER.error("Config entry missing stop_id: %s", self.config_entry.data)
+                errors["base"] = "cannot_connect"
+                available_buses = {}
+            else:
+                # 1. Fetch latest "Available" buses
+                info = await get_stop_info(stop_id)
+                if info:
+                    _, available_buses = info
+                else:
+                    available_buses = {}
+                    errors["base"] = "cannot_connect"
 
-        # 2. Get "Currently Selected" buses from Options (fallback to Data if migration happened)
-        current_buses = self.config_entry.options.get(CONF_BUSES, self.config_entry.data.get(CONF_BUSES, []))
+            # 2. Get "Currently Selected" buses from Options (fallback to Data if migration happened)
+            current_buses = self.config_entry.options.get(CONF_BUSES, self.config_entry.data.get(CONF_BUSES, []))
 
-        # 3. CRITICAL FIX: Ensure all 'current' buses are in the 'available' map.
-        for bus in current_buses:
-            if bus not in available_buses:
-                available_buses[bus] = f"{bus} (Not found/Old)"
+            # 3. Ensure all 'current' buses are in the 'available' map.
+            for bus in current_buses:
+                if bus not in available_buses:
+                    available_buses[bus] = f"{bus} (Not found/Old)"
 
-        if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            if user_input is not None:
+                return self.async_create_entry(title="", data=user_input)
 
-        start_def = self.config_entry.options.get(CONF_QUIET_START, self.config_entry.data.get(CONF_QUIET_START, DEFAULT_QUIET_START))
-        end_def = self.config_entry.options.get(CONF_QUIET_END, self.config_entry.data.get(CONF_QUIET_END, DEFAULT_QUIET_END))
+            start_def = self.config_entry.options.get(CONF_QUIET_START, self.config_entry.data.get(CONF_QUIET_START, DEFAULT_QUIET_START))
+            end_def = self.config_entry.options.get(CONF_QUIET_END, self.config_entry.data.get(CONF_QUIET_END, DEFAULT_QUIET_END))
 
-        return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema({
-                vol.Optional(CONF_QUIET_START, default=start_def): str,
-                vol.Optional(CONF_QUIET_END, default=end_def): str,
-                vol.Required(CONF_BUSES, default=current_buses): cv.multi_select(available_buses),
-            }),
-            errors=errors
-        )
+            return self.async_show_form(
+                step_id="init",
+                data_schema=vol.Schema({
+                    vol.Optional(CONF_QUIET_START, default=start_def): str,
+                    vol.Optional(CONF_QUIET_END, default=end_def): str,
+                    vol.Required(CONF_BUSES, default=current_buses): cv.multi_select(available_buses),
+                }),
+                errors=errors
+            )
+        except Exception as err:
+            _LOGGER.exception("Error in options flow: %s", err)
+            raise

@@ -44,19 +44,22 @@ class KakaoBusSensor(CoordinatorEntity, SensorEntity):
         self.stop_name = coordinator.stop_name
         
         # Entity naming:
-        # - unique_id: Used internally for tracking (not visible)
-        # - entity_id: Will be generated from device name + entity name
+        # - unique_id: Used internally for tracking (must be stable)
+        # - suggested_object_id: Suggests a human-readable entity_id
         # - name: Display name in UI
         
         self._attr_has_entity_name = True
         self._attr_name = f"{bus_name}"
-        self._attr_unique_id = f"{self.stop_id}_{bus_name}"
+        self._attr_unique_id = f"kakaobus_{self.stop_id}_{bus_name}"
         self._attr_native_unit_of_measurement = "min"
         self._attr_icon = "mdi:bus-clock"
         
-        # Set a suggested entity_id that is more readable
-        # This helps HA generate something like sensor.lotte_castle_126
-        self._attr_translation_key = "bus_arrival"
+        # Create a readable suggested entity_id
+        # This creates something like: sensor.kakaobus_lotte_castle_126
+        import re
+        clean_stop_name = re.sub(r'[^a-zA-Z0-9가-힣]', '_', self.stop_name).lower()
+        clean_bus_name = re.sub(r'[^a-zA-Z0-9가-힣]', '_', bus_name).lower()
+        self.entity_id = f"sensor.kakaobus_{clean_stop_name}_{clean_bus_name}"
 
     @property
     def device_info(self) -> DeviceInfo:
