@@ -3,8 +3,11 @@
   "name": "HA KakaoMap Bus",
   "documentation": "https://github.com/mahlernim/ha-kakaomap-bus",
   "dependencies": [],
-  "codeowners": ["@mahlernim"],
+  "codeowners": [
+    "@mahlernim"
+  ],
   "requirements": [],
-  "version": "1.0.0",
-  "iot_class": "cloud_polling"
+  "version": "1.0.1",
+  "iot_class": "cloud_polling",
+  "config_flow": true
 }
