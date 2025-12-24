@@ -13,13 +13,13 @@ from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 import json
 
-from .const import DOMAIN, CONF_STOP_ID, CONF_BUSES, CONF_QUIET_START, CONF_QUIET_END, DEFAULT_QUIET_START, DEFAULT_QUIET_END
+from .const import DOMAIN, CONF_STOP_ID, CONF_STOP_NAME, CONF_BUSES, CONF_QUIET_START, CONF_QUIET_END, DEFAULT_QUIET_START, DEFAULT_QUIET_END
 from .coordinator import API_URL
 
 _LOGGER = logging.getLogger(__name__)
 
-async def get_buses_at_stop(stop_id: str) -> dict[str, str] | None:
-    """Get list of buses at stop. Returns dict {bus_name: label}."""
+async def get_stop_info(stop_id: str) -> tuple[str, dict[str, str]] | None:
+    """Get stop name and list of buses. Returns (stop_name, {bus_name: label})."""
     url = API_URL.format(stop_id)
     try:
         async with async_timeout.timeout(10):
@@ -33,8 +33,8 @@ async def get_buses_at_stop(stop_id: str) -> dict[str, str] | None:
                     if "lines" not in data:
                         return None
                         
-                    # Build dict of {bus_name: Label}
-                    # Example Label: "126 (To Sujeong)"
+                    stop_name = data.get("name", stop_id)
+                        
                     bus_dict = {}
                     for line in data["lines"]:
                         name = line.get("name")
@@ -44,7 +44,7 @@ async def get_buses_at_stop(stop_id: str) -> dict[str, str] | None:
                             if direction:
                                 label += f" ({direction})"
                             bus_dict[name] = label
-                    return bus_dict
+                    return stop_name, bus_dict
     except Exception:
         return None
 
@@ -57,6 +57,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def __init__(self):
         """Initialize."""
         self.stop_id: str | None = None
+        self.stop_name: str | None = None
         self.available_buses: dict[str, str] = {}
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
@@ -71,9 +72,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._abort_if_unique_id_configured()
 
             # validate and fetch buses
-            buses = await get_buses_at_stop(self.stop_id)
-            if buses:
-                self.available_buses = buses
+            info = await get_stop_info(self.stop_id)
+            if info:
+                self.stop_name, self.available_buses = info
                 return await self.async_step_select_bus()
             else:
                 errors["base"] = "invalid_stop_id"
@@ -91,11 +92,14 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
         
         if user_input is not None:
-            # Create Entry
+            # Title: "Stop Name (Stop ID)"
+            title = f"{self.stop_name} ({self.stop_id})"
+            
             return self.async_create_entry(
-                title=f"Bus Stop {self.stop_id}",
+                title=title,
                 data={
                     CONF_STOP_ID: self.stop_id,
+                    CONF_STOP_NAME: self.stop_name,
                     CONF_QUIET_START: DEFAULT_QUIET_START,
                     CONF_QUIET_END: DEFAULT_QUIET_END
                 },
@@ -132,28 +136,29 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """Manage the options."""
         errors = {}
         
-        # We need to re-fetch buses in case new routes were added to the stop
         stop_id = self.config_entry.data[CONF_STOP_ID]
-        available_buses = await get_buses_at_stop(stop_id)
         
-        if not available_buses:
-             # Fallback to existing selected buses if API fails
-             current_buses = self.config_entry.options.get(CONF_BUSES, [])
-             available_buses = {b: b for b in current_buses}
+        # 1. Fetch latest "Available" buses
+        info = await get_stop_info(stop_id)
+        if info:
+             _, available_buses = info
+        else:
+             available_buses = {}
              errors["base"] = "cannot_connect"
+
+        # 2. Get "Currently Selected" buses from Options (fallback to Data if migration happened)
+        current_buses = self.config_entry.options.get(CONF_BUSES, self.config_entry.data.get(CONF_BUSES, []))
+
+        # 3. CRITICAL FIX: Ensure all 'current' buses are in the 'available' map.
+        for bus in current_buses:
+            if bus not in available_buses:
+                available_buses[bus] = f"{bus} (Not found/Old)"
 
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        # Defaults
-        current_buses = self.config_entry.options.get(CONF_BUSES, [])
-        # Filter current buses to only those that exist in available (or keep them?)
-        # Better to keep them in case temporary API glitch
-        
-        # Merge dicts to ensure we show labels for old buses if still valid
-        
-        start_def = self.config_entry.options.get(CONF_QUIET_START, DEFAULT_QUIET_START)
-        end_def = self.config_entry.options.get(CONF_QUIET_END, DEFAULT_QUIET_END)
+        start_def = self.config_entry.options.get(CONF_QUIET_START, self.config_entry.data.get(CONF_QUIET_START, DEFAULT_QUIET_START))
+        end_def = self.config_entry.options.get(CONF_QUIET_END, self.config_entry.data.get(CONF_QUIET_END, DEFAULT_QUIET_END))
 
         return self.async_show_form(
             step_id="init",

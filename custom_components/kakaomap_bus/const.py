@@ -2,6 +2,7 @@
 
 DOMAIN = "kakaomap_bus"
 CONF_STOP_ID = "stop_id"
+CONF_STOP_NAME = "stop_name"
 CONF_BUSES = "buses"
 CONF_QUIET_START = "quiet_start"
 CONF_QUIET_END = "quiet_end"

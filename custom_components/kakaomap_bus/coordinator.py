@@ -16,7 +16,7 @@ from homeassistant.helpers.update_coordinator import (
 )
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, CONF_STOP_ID, CONF_QUIET_START, CONF_QUIET_END, DEFAULT_QUIET_START, DEFAULT_QUIET_END
+from .const import DOMAIN, CONF_STOP_ID, CONF_STOP_NAME, CONF_QUIET_START, CONF_QUIET_END, DEFAULT_QUIET_START, DEFAULT_QUIET_END
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,6 +35,7 @@ class KakaoBusCoordinator(DataUpdateCoordinator):
         )
         self.entry = entry
         self.stop_id = entry.data[CONF_STOP_ID]
+        self.stop_name = entry.data.get(CONF_STOP_NAME, self.stop_id) # Fallback to ID if name missing
 
     @property
     def _quiet_hours_active(self) -> bool:

@@ -3,13 +3,9 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.components.sensor import SensorEntity
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, CONF_BUSES, CONF_STOP_ID
+from homeassistant.helpers.device_registry import DeviceInfo
+from .const import DOMAIN, CONF_BUSES, CONF_STOP_ID, CONF_STOP_NAME
 from .coordinator import KakaoBusCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -40,11 +36,28 @@ class KakaoBusSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self.bus_name = bus_name
         self.stop_id = coordinator.stop_id
+        
+        # New Naming Logic:
+        # Device Name: "Lotte Castle" (from coordinator.stop_name)
+        # Entity Name: "126"
+        # Result in UI: "Lotte Castle 126"
+        
         self._attr_has_entity_name = True
         self._attr_name = f"{bus_name}"
         self._attr_unique_id = f"{self.stop_id}_{bus_name}"
         self._attr_native_unit_of_measurement = "min"
         self._attr_icon = "mdi:bus-clock"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device registry information."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, self.stop_id)},
+            name=self.coordinator.stop_name,
+            manufacturer="KakaoMap",
+            model="Bus Stop",
+            configuration_url=f"https://map.kakao.com/bus/stop.json?busstopid={self.stop_id}",
+        )
 
     @property
     def native_value(self) -> int | None:
