@@ -41,27 +41,33 @@ class KakaoBusSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self.bus_name = bus_name
         self.stop_id = coordinator.stop_id
+        self.stop_name = coordinator.stop_name
         
-        # New Naming Logic:
-        # Device Name: "Lotte Castle" (from coordinator.stop_name)
-        # Entity Name: "126"
-        # Result in UI: "Lotte Castle 126"
+        # Entity naming:
+        # - unique_id: Used internally for tracking (not visible)
+        # - entity_id: Will be generated from device name + entity name
+        # - name: Display name in UI
         
         self._attr_has_entity_name = True
         self._attr_name = f"{bus_name}"
         self._attr_unique_id = f"{self.stop_id}_{bus_name}"
         self._attr_native_unit_of_measurement = "min"
         self._attr_icon = "mdi:bus-clock"
+        
+        # Set a suggested entity_id that is more readable
+        # This helps HA generate something like sensor.lotte_castle_126
+        self._attr_translation_key = "bus_arrival"
 
     @property
     def device_info(self) -> DeviceInfo:
         """Return device registry information."""
         return DeviceInfo(
             identifiers={(DOMAIN, self.stop_id)},
-            name=self.coordinator.stop_name,
+            name=self.stop_name,
             manufacturer="KakaoMap",
             model="Bus Stop",
             configuration_url=f"https://map.kakao.com/bus/stop.json?busstopid={self.stop_id}",
+            # No suggested_area - prevents the forced area selection dialog
         )
 
     @property
