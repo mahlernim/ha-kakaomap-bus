@@ -1,0 +1,40 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "카카오맵 버스 도착 정보 (KakaoMap Bus)",
+                "description": "버스 정류장 ID를 입력해주세요. (예: BS97660)",
+                "data": {
+                    "stop_id": "버스 정류장 ID"
+                }
+            },
+            "select_bus": {
+                "title": "버스 노선 선택",
+                "description": "추적할 버스 노선을 선택해주세요.",
+                "data": {
+                    "buses": "버스 목록"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "연결 실패 (API 오류)",
+            "invalid_stop_id": "유효하지 않은 정류장 ID입니다.",
+            "no_buses_found": "해당 정류장에 버스 정보가 없습니다."
+        },
+        "abort": {
+            "already_configured": "이미 설정된 정류장입니다."
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "설정 변경",
+                "data": {
+                    "quiet_start": "방해 금지 시작 시간",
+                    "quiet_end": "방해 금지 종료 시간",
+                    "buses": "추적할 버스 선택"
+                }
+            }
+        }
+    }
+}

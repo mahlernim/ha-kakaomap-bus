@@ -1,0 +1,10 @@
+{
+  "domain": "kakaomap_bus",
+  "name": "HA KakaoMap Bus",
+  "documentation": "https://github.com/mahlernim/ha-kakaomap-bus",
+  "dependencies": [],
+  "codeowners": ["@mahlernim"],
+  "requirements": [],
+  "version": "1.0.0",
+  "iot_class": "cloud_polling"
+}

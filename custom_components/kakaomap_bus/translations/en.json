@@ -1,0 +1,40 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "KakaoMap Bus",
+                "description": "Please enter the Bus Stop ID (e.g., BS97660).",
+                "data": {
+                    "stop_id": "Bus Stop ID"
+                }
+            },
+            "select_bus": {
+                "title": "Select Bus Lines",
+                "description": "Select the bus lines you want to track.",
+                "data": {
+                    "buses": "Bus List"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Connection Failed",
+            "invalid_stop_id": "Invalid Stop ID",
+            "no_buses_found": "No buses found at this stop."
+        },
+        "abort": {
+            "already_configured": "This stop is already configured."
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Configure Options",
+                "data": {
+                    "quiet_start": "Quiet Hours Start",
+                    "quiet_end": "Quiet Hours End",
+                    "buses": "Select Buses to Track"
+                }
+            }
+        }
+    }
+}
