@@ -3,7 +3,12 @@ from __future__ import annotations
 
 import logging
 
-
+from typing import Any
+from homeassistant.components.sensor import SensorEntity
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.device_registry import DeviceInfo
 from .const import DOMAIN, CONF_BUSES, CONF_STOP_ID, CONF_STOP_NAME
 from .coordinator import KakaoBusCoordinator
