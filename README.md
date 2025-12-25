@@ -5,6 +5,8 @@
 Home Assistant를 위한 카카오맵 실시간 버스 도착 정보 통합구성요소입니다.  
 사용자가 원하는 버스 정류장과 노선(버스 번호)을 선택하여 실시간 도착 정보를 센서로 제공합니다.
 
+![Screenshot](images/screenshot.png)
+
 ---
 
 ## 🇰🇷 한국어 (Korean)
