@@ -30,6 +30,7 @@
             "init": {
                 "title": "Configure Options",
                 "data": {
+                    "scan_interval": "Polling Interval (sec, 30-600)",
                     "quiet_start": "Quiet Hours Start",
                     "quiet_end": "Quiet Hours End",
                     "buses": "Select Buses to Track"

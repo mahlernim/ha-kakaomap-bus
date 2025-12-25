@@ -12,7 +12,11 @@ from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 import json
 
-from .const import DOMAIN, CONF_STOP_ID, CONF_STOP_NAME, CONF_BUSES, CONF_QUIET_START, CONF_QUIET_END, DEFAULT_QUIET_START, DEFAULT_QUIET_END
+from .const import (
+    DOMAIN, CONF_STOP_ID, CONF_STOP_NAME, CONF_BUSES, CONF_QUIET_START, CONF_QUIET_END, 
+    CONF_SCAN_INTERVAL, DEFAULT_QUIET_START, DEFAULT_QUIET_END, DEFAULT_SCAN_INTERVAL,
+    MIN_SCAN_INTERVAL, MAX_SCAN_INTERVAL
+)
 from .coordinator import API_URL
 
 _LOGGER = logging.getLogger(__name__)
@@ -168,10 +172,14 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
             start_def = self.config_entry.options.get(CONF_QUIET_START, self.config_entry.data.get(CONF_QUIET_START, DEFAULT_QUIET_START))
             end_def = self.config_entry.options.get(CONF_QUIET_END, self.config_entry.data.get(CONF_QUIET_END, DEFAULT_QUIET_END))
+            interval_def = self.config_entry.options.get(CONF_SCAN_INTERVAL, self.config_entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
 
             return self.async_show_form(
                 step_id="init",
                 data_schema=vol.Schema({
+                    vol.Optional(CONF_SCAN_INTERVAL, default=interval_def): vol.All(
+                        vol.Coerce(int), vol.Range(min=MIN_SCAN_INTERVAL, max=MAX_SCAN_INTERVAL)
+                    ),
                     vol.Optional(CONF_QUIET_START, default=start_def): str,
                     vol.Optional(CONF_QUIET_END, default=end_def): str,
                     vol.Required(CONF_BUSES, default=current_buses): cv.multi_select(available_buses),

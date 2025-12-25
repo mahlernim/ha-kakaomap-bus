@@ -30,6 +30,7 @@
             "init": {
                 "title": "설정 변경",
                 "data": {
+                    "scan_interval": "폴링 간격 (초, 30-600)",
                     "quiet_start": "방해 금지 시작 시간",
                     "quiet_end": "방해 금지 종료 시간",
                     "buses": "추적할 버스 선택"
