@@ -51,7 +51,7 @@ class KakaoBusSensor(CoordinatorEntity, SensorEntity):
         self._attr_has_entity_name = True
         self._attr_name = f"{bus_name}"
         self._attr_unique_id = f"kakaobus_{self.stop_id}_{bus_name}"
-        self._attr_native_unit_of_measurement = "min"
+        self._attr_native_unit_of_measurement = "분"
         self._attr_icon = "mdi:bus-clock"
         
         # Create a readable suggested entity_id
@@ -124,7 +124,7 @@ class KakaoBusSensor(CoordinatorEntity, SensorEntity):
         # Next bus (2nd bus)
         arrival_time_2 = arrival.get("arrivalTime2", 0)
         if arrival_time_2 > 0:
-            attrs["next_bus_min"] = round(arrival_time_2 / 60)
+            attrs["next_bus_min"] = f"{round(arrival_time_2 / 60) 분"
         else:
             attrs["next_bus_min"] = None
 
