@@ -59,9 +59,9 @@ class KakaoBusCoordinator(DataUpdateCoordinator):
             # Parse times (format HH:MM:SS or HH:MM)
             start_time = datetime.strptime(start_str, "%H:%M:%S").time()
         except ValueError:
-             try:
+            try:
                 start_time = datetime.strptime(start_str, "%H:%M").time()
-             except ValueError:
+            except ValueError:
                 return False # Fail safe
 
         try:

@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.util import slugify
 from .const import DOMAIN, CONF_BUSES, CONF_STOP_ID, CONF_STOP_NAME
 from .coordinator import KakaoBusCoordinator
 
@@ -53,13 +54,10 @@ class KakaoBusSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"kakaobus_{self.stop_id}_{bus_name}"
         self._attr_native_unit_of_measurement = "min"
         self._attr_icon = "mdi:bus-clock"
-        
-        # Create a readable suggested entity_id
-        # This creates something like: sensor.kakaobus_lotte_castle_126
-        import re
-        clean_stop_name = re.sub(r'[^a-zA-Z0-9가-힣]', '_', self.stop_name).lower()
-        clean_bus_name = re.sub(r'[^a-zA-Z0-9가-힣]', '_', bus_name).lower()
-        self.entity_id = f"sensor.kakaobus_{clean_stop_name}_{clean_bus_name}"
+        self._attr_suggested_object_id = (
+            slugify(f"kakaobus_{self.stop_id}_{bus_name}")
+            or f"kakaobus_{self.stop_id.lower()}"
+        )
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -113,7 +111,7 @@ class KakaoBusSensor(CoordinatorEntity, SensorEntity):
         """Return attributes."""
         attrs = {}
         if not self.coordinator.data:
-             return attrs
+            return attrs
 
         line_data = self.coordinator.data.get(self.bus_name, {})
         if not line_data:
