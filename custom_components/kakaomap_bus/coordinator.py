@@ -17,9 +17,15 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     DOMAIN, CONF_STOP_ID, CONF_STOP_NAME, CONF_QUIET_START, CONF_QUIET_END, 
-    CONF_SCAN_INTERVAL, DEFAULT_QUIET_START, DEFAULT_QUIET_END, DEFAULT_SCAN_INTERVAL
+    CONF_SCAN_INTERVAL, DEFAULT_QUIET_START, DEFAULT_QUIET_END, DEFAULT_SCAN_INTERVAL,
+    DEFAULT_MAX_STALE_UPDATES,
 )
-from .api import async_fetch_stop_data, build_bus_dict, describe_api_error
+from .api import (
+    async_fetch_stop_data,
+    build_bus_dict,
+    describe_api_error,
+    is_transient_api_error,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,6 +50,7 @@ class KakaoBusCoordinator(DataUpdateCoordinator):
         self.stop_id = entry.data[CONF_STOP_ID]
         self.stop_name = entry.data.get(CONF_STOP_NAME, self.stop_id)
         self._session = async_get_clientsession(hass)
+        self._consecutive_failures = 0
 
     @property
     def _quiet_hours_active(self) -> bool:
@@ -88,8 +95,21 @@ class KakaoBusCoordinator(DataUpdateCoordinator):
 
         try:
             data = await async_fetch_stop_data(self._session, self.stop_id)
+            self._consecutive_failures = 0
             return build_bus_dict(data)
         except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as err:
+            if is_transient_api_error(err) and self.data:
+                self._consecutive_failures += 1
+                if self._consecutive_failures <= DEFAULT_MAX_STALE_UPDATES:
+                    _LOGGER.warning(
+                        "Transient KakaoMap error for %s; keeping last data "
+                        "(failed refresh %s/%s): %s",
+                        self.stop_id,
+                        self._consecutive_failures,
+                        DEFAULT_MAX_STALE_UPDATES,
+                        describe_api_error(err),
+                    )
+                    return self.data
             raise UpdateFailed(describe_api_error(err)) from err
         except Exception as err:
             raise UpdateFailed(describe_api_error(err)) from err

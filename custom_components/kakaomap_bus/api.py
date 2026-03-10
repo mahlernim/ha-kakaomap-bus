@@ -7,24 +7,56 @@ from typing import Any
 
 import aiohttp
 
+from .const import DEFAULT_REQUEST_RETRIES
+
 API_URL = "https://map.kakao.com/bus/stop.json?busstopid={}"
 REQUEST_HEADERS = {"User-Agent": "Mozilla/5.0"}
 REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=10)
 
 
-async def async_fetch_stop_data(
-    session: aiohttp.ClientSession, stop_id: str
-) -> dict[str, Any]:
-    """Fetch and parse stop data from KakaoMap."""
-    url = API_URL.format(stop_id)
+def is_transient_api_error(err: Exception) -> bool:
+    """Return True when a request failure is likely temporary."""
+    if isinstance(
+        err,
+        (
+            aiohttp.ClientConnectorError,
+            aiohttp.ServerDisconnectedError,
+            aiohttp.ClientOSError,
+            asyncio.TimeoutError,
+        ),
+    ):
+        return True
 
-    async with session.get(
-        url,
-        headers=REQUEST_HEADERS,
-        timeout=REQUEST_TIMEOUT,
-    ) as response:
-        response.raise_for_status()
-        return json.loads(await response.text())
+    return (
+        isinstance(err, aiohttp.ClientResponseError)
+        and (err.status == 429 or err.status >= 500)
+    )
+
+
+async def async_fetch_stop_data(
+    session: aiohttp.ClientSession, stop_id: str, retries: int = DEFAULT_REQUEST_RETRIES
+) -> dict[str, Any]:
+    """Fetch and parse stop data from KakaoMap with short retry handling."""
+    url = API_URL.format(stop_id)
+    last_err: Exception | None = None
+
+    for attempt in range(1, max(1, retries) + 1):
+        try:
+            async with session.get(
+                url,
+                headers=REQUEST_HEADERS,
+                timeout=REQUEST_TIMEOUT,
+            ) as response:
+                response.raise_for_status()
+                return json.loads(await response.text())
+        except Exception as err:
+            last_err = err
+            if attempt >= retries or not is_transient_api_error(err):
+                raise
+
+            await asyncio.sleep(min(attempt, 3))
+
+    raise RuntimeError(f"Request failed without an exception for stop {stop_id}") from last_err
 
 
 def build_bus_dict(data: dict[str, Any]) -> dict[str, dict[str, Any]]:
