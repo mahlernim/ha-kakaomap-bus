@@ -1,133 +1,154 @@
-"""Sensor for KakaoMap Bus."""
+"""Numeric arrivals and localized status sensors."""
+
 from __future__ import annotations
 
-import logging
-
 from typing import Any
-from homeassistant.components.sensor import SensorEntity
+
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.util import slugify
-from .const import DOMAIN, CONF_BUSES, CONF_STOP_ID, CONF_STOP_NAME
+
+from .api import arrival_seconds, map_url
+from .const import ARRIVAL_STATUSES, CONF_BUSES, DOMAIN
 from .coordinator import KakaoBusCoordinator
 
-_LOGGER = logging.getLogger(__name__)
+PARALLEL_UPDATES = 0
+
 
 async def async_setup_entry(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    """Set up the sensor platform."""
-    coordinator: KakaoBusCoordinator = hass.data[DOMAIN][entry.entry_id]
-    
-    # Get selected buses from options (or data during first setup)
-    selected_buses = entry.options.get(CONF_BUSES, entry.data.get(CONF_BUSES, []))
-    
-    entities = []
-    for bus_name in selected_buses:
-        entities.append(KakaoBusSensor(coordinator, bus_name))
-
-    async_add_entities(entities)
+    coordinator = hass.data[DOMAIN][entry.entry_id]
+    buses = entry.options.get(CONF_BUSES, entry.data.get(CONF_BUSES, []))
+    async_add_entities(
+        [
+            entity(coordinator, name)
+            for name in buses
+            for entity in (KakaoBusSensor, KakaoBusStatusSensor)
+        ]
+    )
 
 
-class KakaoBusSensor(CoordinatorEntity, SensorEntity):
-    """KakaoBus Sensor class."""
+class KakaoBusEntity(CoordinatorEntity[KakaoBusCoordinator], SensorEntity):
+    """Shared stop identity and freshness metadata."""
+
+    _attr_has_entity_name = True
 
     def __init__(self, coordinator: KakaoBusCoordinator, bus_name: str) -> None:
-        """Initialize."""
-        super().__init__(coordinator)
+        super().__init__(coordinator, context=bus_name)
         self.bus_name = bus_name
         self.stop_id = coordinator.stop_id
-        self.stop_name = coordinator.stop_name
-        
-        # Entity naming:
-        # - unique_id: Used internally for tracking (must be stable)
-        # - suggested_object_id: Suggests a human-readable entity_id
-        # - name: Display name in UI
-        
-        self._attr_has_entity_name = True
-        self._attr_name = f"{bus_name}"
-        self._attr_unique_id = f"kakaobus_{self.stop_id}_{bus_name}"
-        self._attr_native_unit_of_measurement = "min"
-        self._attr_icon = "mdi:bus-clock"
-        self._attr_suggested_object_id = (
-            slugify(f"kakaobus_{self.stop_id}_{bus_name}")
-            or f"kakaobus_{self.stop_id.lower()}"
-        )
 
     @property
     def device_info(self) -> DeviceInfo:
-        """Return device registry information."""
         return DeviceInfo(
             identifiers={(DOMAIN, self.stop_id)},
-            name=self.stop_name,
+            name=self.coordinator.stop_name,
             manufacturer="KakaoMap",
             model="Bus Stop",
-            configuration_url=f"https://map.kakao.com/bus/stop.json?busstopid={self.stop_id}",
-            # No suggested_area - prevents the forced area selection dialog
+            configuration_url=map_url(self.stop_id),
         )
 
     @property
-    def native_value(self) -> int | None:
-        """Return the minutes until arrival."""
-        if not self.coordinator.data:
-            return None
-            
-        line_data = self.coordinator.data.get(self.bus_name)
-        if not line_data:
-            return None
-        
-        # Check "NOVEHICLE" or arrivalTime == 0
-        realtime_state = line_data.get("realtimeState", "")
-        # The arriving object
-        arrival = line_data.get("arrival", {})
-        arrival_time = arrival.get("arrivalTime", 0)
-
-        if realtime_state == "NOVEHICLE" or arrival_time == 0:
-            # We strictly prevent returning 0 if there is no vehicle
-            return None
-            
-        return round(arrival_time / 60)
+    def _line(self) -> dict:
+        return (self.coordinator.data or {}).get(self.bus_name, {})
 
     @property
-    def available(self) -> bool:
-        """Return if entity is available."""
-        # The sensor is "available" in HA terms even if bus is not there, 
-        # but the state will be "unavailable" (None) if native_value returns None.
-        # However, if API failed completely, super().available is False.
-        if not super().available:
-            return False
-            
-        # If logic dictates that "No Bus" = Unavailable entity, we can return False here.
-        # But usually "Unknown" state is better for "No Bus".
-        return True
+    def _arrival(self) -> dict:
+        arrival = self._line.get("arrival")
+        return arrival if isinstance(arrival, dict) else {}
+
+    @property
+    def _seconds(self) -> int | float | None:
+        if not self.coordinator.last_update_success or self.coordinator.paused:
+            return None
+        if self._line.get("realtimeState") == "NOVEHICLE":
+            return None
+        return arrival_seconds(self._arrival.get("arrivalTime")) or None
+
+    @property
+    def arrival_status(self) -> str:
+        if self.coordinator.paused:
+            return "paused"
+        if not self.coordinator.last_update_success:
+            return "connection_lost"
+        return "live" if self._seconds is not None else "no_arrival"
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return attributes."""
-        attrs = {}
-        if not self.coordinator.data:
-            return attrs
+        coordinator = self.coordinator
+        return {
+            "arrival_status": self.arrival_status,
+            "last_success": coordinator.last_success.isoformat()
+            if coordinator.last_success
+            else None,
+            "paused_until": coordinator.paused_until.isoformat()
+            if coordinator.paused_until
+            else None,
+            "direction": self._arrival.get("direction"),
+            "stop_name": coordinator.stop_name,
+        }
 
-        line_data = self.coordinator.data.get(self.bus_name, {})
-        if not line_data:
-            return attrs
 
-        arrival = line_data.get("arrival", {})
-        
-        # Next bus (2nd bus)
-        arrival_time_2 = arrival.get("arrivalTime2", 0)
-        if arrival_time_2 > 0:
-            attrs["next_bus_min"] = round(arrival_time_2 / 60)
-        else:
-            attrs["next_bus_min"] = None
+class KakaoBusSensor(KakaoBusEntity):
+    """Minutes until arrival; keep all existing unique IDs."""
 
-        attrs["direction"] = arrival.get("direction")
-        attrs["stop_name"] = self.coordinator.entry.title # Reuse title which handles Stop Name
-        attrs["vehicle_type"] = arrival.get("vehicleType")
-        
+    _attr_native_unit_of_measurement = "min"
+    _attr_icon = "mdi:bus-clock"
+
+    def __init__(self, coordinator: KakaoBusCoordinator, bus_name: str) -> None:
+        super().__init__(coordinator, bus_name)
+        self._attr_unique_id = f"kakaobus_{self.stop_id}_{bus_name}"
+
+    @property
+    def name(self) -> str:
+        return self.coordinator.route_label(self.bus_name)
+
+    @property
+    def suggested_object_id(self) -> str:
+        return slugify(f"kakaobus_{self.stop_id}_{self.bus_name}")
+
+    @property
+    def native_value(self) -> int | None:
+        return round(self._seconds / 60) if self._seconds is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        attrs = super().extra_state_attributes
+        seconds = arrival_seconds(self._arrival.get("arrivalTime2"))
+        attrs["next_bus_min"] = (
+            round(seconds / 60) if seconds and self.arrival_status == "live" else None
+        )
+        attrs["vehicle_type"] = self._arrival.get("vehicleType")
         return attrs
+
+
+class KakaoBusStatusSensor(KakaoBusEntity):
+    """Explain missing arrivals, including when the API is unreachable."""
+
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ARRIVAL_STATUSES
+    _attr_translation_key = "arrival_status"
+    _attr_icon = "mdi:bus-alert"
+
+    def __init__(self, coordinator: KakaoBusCoordinator, bus_name: str) -> None:
+        super().__init__(coordinator, bus_name)
+        self._attr_unique_id = f"kakaobus_status_{self.stop_id}_{bus_name}"
+        self._attr_translation_placeholders = {"route": coordinator.route_label(bus_name)}
+
+    @property
+    def suggested_object_id(self) -> str:
+        return slugify(f"kakaobus_status_{self.stop_id}_{self.bus_name}")
+
+    @property
+    def available(self) -> bool:
+        # This entity reports connectivity, so an API outage is a valid state.
+        return True
+
+    @property
+    def native_value(self) -> str:
+        return self.arrival_status

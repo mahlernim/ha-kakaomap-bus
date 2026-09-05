@@ -1,9 +1,13 @@
-"""Constants for the HA KakaoMap Bus integration."""
+"""Constants for HA KakaoMap Bus."""
 
 DOMAIN = "kakaomap_bus"
 CONF_STOP_ID = "stop_id"
 CONF_STOP_NAME = "stop_name"
+CONF_STOP_DIRECTION = "stop_direction"
+CONF_STOP_NICKNAME = "stop_nickname"
+CONF_ROUTE_LABELS = "route_labels"
 CONF_BUSES = "buses"
+CONF_QUIET_ENABLED = "quiet_enabled"
 CONF_QUIET_START = "quiet_start"
 CONF_QUIET_END = "quiet_end"
 CONF_SCAN_INTERVAL = "scan_interval"
@@ -14,4 +18,5 @@ DEFAULT_SCAN_INTERVAL = 90
 MIN_SCAN_INTERVAL = 30
 MAX_SCAN_INTERVAL = 600
 DEFAULT_REQUEST_RETRIES = 3
-DEFAULT_MAX_STALE_UPDATES = 4
+
+ARRIVAL_STATUSES = ["live", "no_arrival", "paused", "connection_lost"]
