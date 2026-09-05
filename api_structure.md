@@ -27,7 +27,7 @@ Each item in the `lines` array contains:
 ## Arrival Object
 | Key | Type | Description |
 | :--- | :--- | :--- |
-| `arrivalTime` | Integer | Seconds until the next bus arrives. `0` usually means no active vehicle or arrived. |
+| `arrivalTime` | Number | Seconds until the next bus arrives. Zero or missing values do not provide a usable estimate. |
 | `busStopCount` | Integer | Number of stops remaining until arrival. |
 | `arrivalTime2` | Integer | Seconds until the second following bus arrives. |
 | `busStopCount2` | Integer | Number of stops remaining for the second bus. |
@@ -57,6 +57,10 @@ Each item in the `lines` array contains:
 ```
 
 ## Integration Logic
-- **Refresh Interval**: API should be polled every 30-60 seconds.
+- **Refresh interval**: 90 seconds by default; configurable from 30 to 600 seconds. Scheduled pauses suppress requests and clear arrival values.
 - **Sensor Mapping**: Each `line` in the `lines` array should map to a sensor entity in Home Assistant.
-- **State**: The `arrivalTime` divided by 60 provides the "minutes until arrival" state.
+- **State**: Valid positive seconds divided by 60, rounded to minutes. Missing or invalid values produce unknown; request failures produce unavailable. Second-arrival values are cleared when the first arrival is not current.
+- **Validation**: Null objects, booleans, strings, negative values, and nonfinite values are not arrival estimates. Malformed routes are isolated when possible.
+- **Status**: Each selected route also has an enum sensor for `live`, `no_arrival`, `paused`, and `connection_lost`, localized by Home Assistant.
+- **Identity**: Existing arrival unique IDs remain `kakaobus_{stop_id}_{bus_name}`. Status IDs use `kakaobus_status_{stop_id}_{bus_name}`. Same-name route collisions remain unsupported.
+- **Scope**: This describes an unofficial website endpoint, not a published Kakao developer API contract. Fields can change.

@@ -1,0 +1,53 @@
+name: Validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - python: "3.14"
+            ha: "2026.9.0"
+            plugin: "0.13.363"
+            pycares: "pycares>=5"
+          - python: "3.13.2"
+            ha: "2025.12.0"
+            plugin: "0.13.298"
+            pycares: "pycares<5"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: >-
+          pip install -r requirements_test.txt
+          homeassistant==${{ matrix.ha }}
+          pytest-homeassistant-custom-component==${{ matrix.plugin }}
+          "${{ matrix.pycares }}"
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: pytest --cov=custom_components.kakaomap_bus --cov-report=term-missing
+
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: home-assistant/actions/hassfest@master
+
+  hacs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hacs/action@main
+        with:
+          category: integration

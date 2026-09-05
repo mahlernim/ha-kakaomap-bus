@@ -1,0 +1,1 @@
+"""KakaoMap integration tests."""
