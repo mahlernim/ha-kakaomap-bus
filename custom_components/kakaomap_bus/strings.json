@@ -13,7 +13,7 @@
       },
       "select_bus": {
         "title": "Choose buses",
-        "description": "**{stop_name}** · {direction}\n\n[View this stop in KakaoMap]({map_url})\n\nStops with the same name may serve opposite directions. Check the direction and choose your routes.",
+        "description": "**{stop_name}** · {direction}\n\n[View this stop in KakaoMap]({map_url})\n\nChoose routes, then review the polling and pause defaults. Updates pause daily from 00:00 to 05:00 in the Home Assistant time zone. Ambiguous route names excluded from new selections are {ambiguous_routes}.",
         "data": {
           "buses": "Buses to track",
           "stop_nickname": "Stop nickname"
@@ -21,11 +21,33 @@
         "data_description": {
           "buses": "Choose at least one bus to show its arrivals.",
           "stop_nickname": "For example, Morning commute. Leave blank to use the original stop name."
+        },
+        "sections": {
+          "polling": {
+            "name": "Polling",
+            "description": "Adaptive polling checks every 30 seconds when a selected route arrives within three minutes. Otherwise it checks every 120 seconds. Fixed polling keeps the selected interval.",
+            "data": {
+              "polling_mode": "Polling mode",
+              "scan_interval": "Fixed interval"
+            },
+            "data_description": {
+              "scan_interval": "Used only with fixed polling. Choose a whole number from 30 to 600 seconds."
+            }
+          },
+          "pause": {
+            "name": "Optional pause schedule",
+            "description": "The default pause is daily from 00:00 to 05:00 in the Home Assistant time zone.",
+            "data": {
+              "quiet_enabled": "Pause updates on a schedule",
+              "quiet_start": "Pause from",
+              "quiet_end": "Resume at"
+            }
+          }
         }
       },
-      "confirm": {
-        "title": "Confirm setup",
-        "description": "**{display_name}**\n\nStop: {stop_name} · {direction}\n\nBuses: {routes}\n\nArrivals update every {interval} seconds. Updates pause daily from {pause_start} to {pause_end}, using the {timezone} time zone.\n\nYou can change buses and pause times in the integration options after setup.\n\n[View this stop in KakaoMap]({map_url})"
+      "reconfigure": {
+        "title": "Refresh stop details",
+        "description": "Refresh the name, direction, and available route list for **{stop_name}**. This refreshes this same stop only and keeps its entity IDs and selected routes.\n\n[View this stop in KakaoMap]({map_url})"
       }
     },
     "error": {
@@ -34,11 +56,21 @@
       "invalid_response": "Could not read KakaoMap's response. Try again later.",
       "rate_limited": "KakaoMap is temporarily limiting requests. Try again later.",
       "no_buses_found": "No routes are available at this stop. Check the stop and direction, or try again later.",
+      "ambiguous_routes_only": "All route names returned for this stop are ambiguous. Wait for KakaoMap to provide distinct route names, then try again.",
       "select_bus": "Choose at least one bus.",
       "invalid_bus": "Choose a bus from the list."
     },
     "abort": {
-      "already_configured": "This stop is already configured. Change its buses in the existing integration options."
+      "already_configured": "This stop is already configured. Change its buses in the existing integration options.",
+      "reconfigure_successful": "Stop details were refreshed."
+    }
+  },
+  "selector": {
+    "polling_mode": {
+      "options": {
+        "adaptive": "Adaptive",
+        "fixed": "Fixed interval"
+      }
     }
   },
   "options": {
@@ -55,6 +87,17 @@
           "stop_nickname": "Leave blank to use the original stop name. A manually renamed device keeps its name."
         },
         "sections": {
+          "polling": {
+            "name": "Polling",
+            "description": "Adaptive polling checks every 30 seconds when a selected route arrives within three minutes. Otherwise it checks every 120 seconds. Fixed polling keeps the selected interval.",
+            "data": {
+              "polling_mode": "Polling mode",
+              "scan_interval": "Fixed interval"
+            },
+            "data_description": {
+              "scan_interval": "Used only with fixed polling. Choose a whole number from 30 to 600 seconds."
+            }
+          },
           "pause": {
             "name": "Pause updates",
             "description": "When enabled, updates pause daily between these times, for example 00:00–05:00. Arrival values are cleared and the paused status is shown.",
@@ -67,15 +110,6 @@
               "quiet_enabled": "Turn off for updates throughout the day.",
               "quiet_end": "Updates resume at this time. The schedule can cross midnight."
             }
-          },
-          "advanced": {
-            "name": "Advanced",
-            "data": {
-              "scan_interval": "Update interval"
-            },
-            "data_description": {
-              "scan_interval": "Default: 90 seconds; range: 30–600. Shorter intervals do not make KakaoMap's source data update faster."
-            }
           }
         }
       }
@@ -85,7 +119,8 @@
       "invalid_time": "Enter valid start and end times.",
       "equal_pause_times": "Choose different start and end times, or turn off scheduled pauses for all-day updates.",
       "invalid_interval": "Enter a whole number from 30 to 600 seconds.",
-      "invalid_bus": "Choose a bus from the list."
+      "invalid_bus": "Choose a bus from the list.",
+      "invalid_polling_mode": "Choose adaptive or fixed polling."
     }
   },
   "entity": {
@@ -96,7 +131,16 @@
           "live": "Arrivals available",
           "no_arrival": "No arrival information",
           "paused": "Updates paused",
-          "connection_lost": "Connection lost"
+          "connection_lost": "Connection lost",
+          "expired": "Arrival estimate expired",
+          "rate_limited": "Requests temporarily limited",
+          "invalid_stop": "Stop information needs attention",
+          "ambiguous_route": "Route name is ambiguous"
+        },
+        "state_attributes": {
+          "retry_at": {
+            "name": "Earliest retry time"
+          }
         }
       }
     }

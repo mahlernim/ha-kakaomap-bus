@@ -6,7 +6,7 @@ import asyncio
 import json
 import math
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from typing import Any
 from urllib.parse import parse_qs, urljoin, urlsplit, urlunsplit
@@ -108,18 +108,31 @@ async def async_resolve_stop_id(session: aiohttp.ClientSession, value: str) -> s
 
 
 def _retry_after(value: str | None) -> float:
-    if value:
+    """Parse the two Retry-After forms without accepting float-like values."""
+    if not value:
+        return 60
+
+    candidate = value.strip()
+    if re.fullmatch(r"[0-9]+", candidate):
         try:
-            seconds = float(value)
-        except ValueError:
-            try:
-                date = parsedate_to_datetime(value)
-                seconds = (date - datetime.now(UTC)).total_seconds()
-            except (TypeError, ValueError, OverflowError):
-                return 60
-        if math.isfinite(seconds):
-            return max(1, seconds)
-    return 60
+            seconds = int(candidate)
+            # The coordinator exposes this as an absolute datetime.  Reject a
+            # syntactically valid delay if it cannot be represented there.
+            datetime.now(UTC) + timedelta(seconds=seconds)
+        except (OverflowError, ValueError):
+            return 60
+        return max(1, seconds)
+
+    try:
+        date = parsedate_to_datetime(candidate)
+        if date.tzinfo is None:
+            return 60
+        seconds = (date.astimezone(UTC) - datetime.now(UTC)).total_seconds()
+    except (TypeError, ValueError, OverflowError):
+        return 60
+    # An HTTP date has second precision. Rounding down avoids crossing
+    # datetime.max after converting the duration back into a deadline.
+    return max(1, math.floor(seconds)) if math.isfinite(seconds) else 60
 
 
 def is_transient_api_error(err: Exception) -> bool:
@@ -168,29 +181,71 @@ def arrival_seconds(value: Any) -> int | float | None:
         return None
 
 
+def validate_stop_identity(data: dict[str, Any], stop_id: str) -> str:
+    """Ensure a payload belongs to the requested KakaoMap bus stop.
+
+    A bad payload can be temporary upstream corruption, so callers receive
+    ``InvalidResponse`` rather than the non-retryable user-input error.
+    """
+    if not isinstance(data, dict):
+        raise InvalidResponse("Expected a stop object")
+    response_stop_id = data.get("id")
+    if not isinstance(response_stop_id, str) or not STOP_ID.fullmatch(response_stop_id):
+        raise InvalidResponse("Missing or invalid stop ID")
+    try:
+        expected_stop_id = parse_stop_id(stop_id)
+    except (AttributeError, InvalidStopID) as err:
+        raise InvalidResponse("Invalid requested stop ID") from err
+    normalized_response_id = response_stop_id.upper()
+    if normalized_response_id != expected_stop_id:
+        raise InvalidResponse("Response stop ID did not match request")
+    return normalized_response_id
+
+
 def build_bus_dict(data: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Normalize routes so bad arrival fields cannot break entity properties."""
     if not isinstance(data, dict) or not isinstance(data.get("lines"), list):
         raise InvalidResponse("Missing route list")
-    buses = {}
+    route_rows: dict[str, list[dict[str, Any]]] = {}
     for line in data["lines"]:
         if not isinstance(line, dict) or not isinstance(line.get("name"), str):
             continue
         name = line["name"]
         if not name.strip():
             continue
+        route_rows.setdefault(name, []).append(line)
+
+    buses = {}
+    for name, rows in route_rows.items():
+        line = rows[0]
+        line_id = line.get("id") if isinstance(line.get("id"), str) else None
+        # The API occasionally repeats one exact row.  Any other duplicate
+        # route name is unsafe to select because route names are not IDs.
+        duplicate_is_exact = (
+            len(rows) > 1
+            and line_id is not None
+            and all(
+                isinstance(row.get("id"), str) and row["id"] == line_id and row == line
+                for row in rows[1:]
+            )
+        )
+        ambiguous = len(rows) > 1 and not duplicate_is_exact
         source = line.get("arrival")
         source = source if isinstance(source, dict) else {}
         arrival = {key: arrival_seconds(source.get(key)) for key in ("arrivalTime", "arrivalTime2")}
         for key in ("direction", "vehicleType"):
             value = source.get(key)
             arrival[key] = value if isinstance(value, str) else None
+        if ambiguous:
+            arrival.update(arrivalTime=None, arrivalTime2=None, direction=None, vehicleType=None)
         buses[name] = {
+            "id": None if ambiguous else line_id,
             "name": name,
             "arrival": arrival,
-            "realtimeState": line.get("realtimeState"),
+            "realtimeState": None if ambiguous else line.get("realtimeState"),
+            "ambiguous": ambiguous,
         }
-    if data["lines"] and not buses:
+    if data["lines"] and not route_rows:
         raise InvalidResponse("No usable routes in response")
     return buses
 
@@ -211,6 +266,7 @@ def build_bus_labels(data: dict[str, Any]) -> dict[str, str]:
         if (direction := buses[name]["arrival"]["direction"])
         else name
         for name in sorted(buses, key=route_sort_key)
+        if not buses[name]["ambiguous"]
     }
 
 

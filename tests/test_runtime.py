@@ -176,7 +176,7 @@ async def test_rate_limit_delay_reaches_ha_scheduler(hass, stop_payload, freezer
         await coordinator.async_refresh()
     assert coordinator.last_exception.retry_after == 120
     assert hass.states.get(arrival).state == "unavailable"
-    assert hass.states.get(status).state == "connection_lost"
+    assert hass.states.get(status).state == "rate_limited"
     await hass.config_entries.async_unload(entry.entry_id)
 
 
@@ -192,6 +192,7 @@ async def test_options_reload_keeps_identity_and_cancels_old_coordinator(
                 **entry.options,
                 "stop_nickname": "퇴근길",
                 "scan_interval": 120,
+                "polling_mode": "fixed",
             },
         )
         await hass.async_block_till_done()

@@ -6,13 +6,13 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import slugify
 
-from .api import arrival_seconds, map_url
+from .api import map_url
 from .const import ARRIVAL_STATUSES, CONF_BUSES, DOMAIN
 from .coordinator import KakaoBusCoordinator
 
@@ -64,19 +64,13 @@ class KakaoBusEntity(CoordinatorEntity[KakaoBusCoordinator], SensorEntity):
 
     @property
     def _seconds(self) -> int | float | None:
-        if not self.coordinator.last_update_success or self.coordinator.paused:
+        if self.arrival_status != "live":
             return None
-        if self._line.get("realtimeState") == "NOVEHICLE":
-            return None
-        return arrival_seconds(self._arrival.get("arrivalTime")) or None
+        return self.coordinator.remaining(self.bus_name)
 
     @property
     def arrival_status(self) -> str:
-        if self.coordinator.paused:
-            return "paused"
-        if not self.coordinator.last_update_success:
-            return "connection_lost"
-        return "live" if self._seconds is not None else "no_arrival"
+        return self.coordinator.route_status(self.bus_name)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -91,6 +85,7 @@ class KakaoBusEntity(CoordinatorEntity[KakaoBusCoordinator], SensorEntity):
             else None,
             "direction": self._arrival.get("direction"),
             "stop_name": coordinator.stop_name,
+            "retry_at": coordinator.retry_at.isoformat() if coordinator.retry_at else None,
         }
 
 
@@ -119,7 +114,7 @@ class KakaoBusSensor(KakaoBusEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         attrs = super().extra_state_attributes
-        seconds = arrival_seconds(self._arrival.get("arrivalTime2"))
+        seconds = self.coordinator.remaining(self.bus_name, "arrivalTime2")
         attrs["next_bus_min"] = (
             round(seconds / 60) if seconds and self.arrival_status == "live" else None
         )
@@ -139,6 +134,14 @@ class KakaoBusStatusSensor(KakaoBusEntity):
         super().__init__(coordinator, bus_name)
         self._attr_unique_id = f"kakaobus_status_{self.stop_id}_{bus_name}"
         self._attr_translation_placeholders = {"route": coordinator.route_label(bus_name)}
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        placeholders = {"route": self.coordinator.route_label(self.bus_name)}
+        if self._attr_translation_placeholders != placeholders:
+            self._attr_translation_placeholders = placeholders
+            self.__dict__.pop("name", None)
+        super()._handle_coordinator_update()
 
     @property
     def suggested_object_id(self) -> str:
