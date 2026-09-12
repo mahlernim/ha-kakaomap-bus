@@ -6,7 +6,7 @@
 
 KakaoMap bus arrivals for Home Assistant, with route selection, scheduled pauses, and clear update status.
 
-[한국어](#한국어) · [English](#english) · [변경 사항](CHANGELOG.md)
+[한국어](#한국어) · [English](#english) · [설치하기](#준비-사항과-설치) · [변경 사항](CHANGELOG.md)
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://www.hacs.xyz/docs/faq/custom_repositories/)
 [![Release](https://img.shields.io/github/v/release/mahlernim/ha-kakaomap-bus)](https://github.com/mahlernim/ha-kakaomap-bus/releases/latest)
