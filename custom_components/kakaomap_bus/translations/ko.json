@@ -13,7 +13,7 @@
       },
       "select_bus": {
         "title": "확인할 버스 선택",
-        "description": "**{stop_name}** · {direction}\n\n[카카오맵에서 위치 확인]({map_url})\n\n이름이 같은 정류장이 있어도 방향이 다를 수 있습니다. 이용할 방향과 버스를 확인하세요.",
+        "description": "**{stop_name}** · {direction}\n\n[카카오맵에서 위치 확인]({map_url})\n\n확인할 노선을 고른 뒤 업데이트와 일시 중지 기본값을 검토하세요. Home Assistant 시간대 기준으로 매일 00:00부터 05:00까지 업데이트를 멈춥니다. 새로 선택할 수 없는 이름이 겹치는 노선은 {ambiguous_routes}입니다.",
         "data": {
           "buses": "확인할 버스",
           "stop_nickname": "정류장 별칭"
@@ -21,11 +21,24 @@
         "data_description": {
           "buses": "도착 정보를 볼 버스를 하나 이상 선택하세요.",
           "stop_nickname": "예: 출근길 정류장. 비워 두면 원래 정류장 이름을 사용합니다."
+        },
+        "sections": {
+          "polling": {
+            "name": "업데이트 방식",
+            "description": "적응형은 선택한 노선의 첫 도착이 3분 이내이면 30초마다, 그 밖에는 120초마다 확인합니다. 고정 간격은 선택한 시간을 유지합니다.",
+            "data": {"polling_mode": "업데이트 방식", "scan_interval": "고정 업데이트 간격"},
+            "data_description": {"scan_interval": "고정 간격을 선택했을 때만 사용합니다. 30~600초 사이의 정수를 입력하세요."}
+          },
+          "pause": {
+            "name": "선택 설정: 업데이트 일시 중지",
+            "description": "기본값은 Home Assistant 시간대 기준으로 매일 00:00부터 05:00까지입니다.",
+            "data": {"quiet_enabled": "정해진 시간에 업데이트 멈추기", "quiet_start": "시작 시간", "quiet_end": "다시 시작할 시간"}
+          }
         }
       },
-      "confirm": {
-        "title": "설정 확인",
-        "description": "**{display_name}**\n\n정류장: {stop_name} · {direction}\n\n선택한 버스: {routes}\n\n{interval}초마다 도착 정보를 확인하며, 매일 {pause_start}부터 {pause_end}까지는 업데이트를 멈춥니다. 시간대는 {timezone}입니다.\n\n추가한 뒤 옵션에서 버스와 일시 중지 시간을 바꿀 수 있습니다.\n\n[카카오맵에서 위치 확인]({map_url})"
+      "reconfigure": {
+        "title": "정류장 정보 새로 고침",
+        "description": "**{stop_name}**의 이름, 방향, 이용 가능한 노선 목록을 새로 고칩니다. 같은 정류장 정보만 갱신하며 엔티티 ID와 선택한 노선은 유지합니다.\n\n[카카오맵에서 위치 확인]({map_url})"
       }
     },
     "error": {
@@ -34,11 +47,21 @@
       "invalid_response": "카카오맵에서 정보를 읽지 못했습니다. 잠시 후 다시 시도하세요.",
       "rate_limited": "카카오맵에서 요청을 잠시 제한하고 있습니다. 잠시 후 다시 시도하세요.",
       "no_buses_found": "이 정류장에 표시할 버스가 없습니다. 정류장과 방향을 확인하거나 잠시 후 다시 시도하세요.",
+      "ambiguous_routes_only": "이 정류장에서 받은 모든 노선 이름이 겹칩니다. 카카오맵이 구분되는 노선 이름을 제공한 뒤 다시 시도하세요.",
       "select_bus": "버스를 하나 이상 선택하세요.",
       "invalid_bus": "목록에 있는 버스를 선택하세요."
     },
     "abort": {
-      "already_configured": "이미 추가한 정류장입니다. 기존 정류장의 옵션에서 버스를 변경하세요."
+      "already_configured": "이미 추가한 정류장입니다. 기존 정류장의 옵션에서 버스를 변경하세요.",
+      "reconfigure_successful": "정류장 정보를 새로 고쳤습니다."
+    }
+  },
+  "selector": {
+    "polling_mode": {
+      "options": {
+        "adaptive": "적응형",
+        "fixed": "고정 간격"
+      }
     }
   },
   "options": {
@@ -55,6 +78,12 @@
           "stop_nickname": "비워 두면 원래 정류장 이름을 사용합니다. 직접 지정한 기기 이름은 유지됩니다."
         },
         "sections": {
+          "polling": {
+            "name": "업데이트 방식",
+            "description": "적응형은 선택한 노선의 첫 도착이 3분 이내이면 30초마다, 그 밖에는 120초마다 확인합니다. 고정 간격은 선택한 시간을 유지합니다.",
+            "data": {"polling_mode": "업데이트 방식", "scan_interval": "고정 업데이트 간격"},
+            "data_description": {"scan_interval": "고정 간격을 선택했을 때만 사용합니다. 30~600초 사이의 정수를 입력하세요."}
+          },
           "pause": {
             "name": "업데이트 일시 중지",
             "description": "켜면 매일 시작 시간부터 종료 시간까지 새 정보를 가져오지 않습니다. 예: 00:00부터 05:00까지. 도착 시간은 비워 두고 일시 중지 상태를 표시합니다.",
@@ -67,15 +96,6 @@
               "quiet_enabled": "하루 종일 업데이트하려면 끄세요.",
               "quiet_end": "종료 시간부터 다시 정보를 가져옵니다. 자정을 넘는 시간도 설정할 수 있습니다."
             }
-          },
-          "advanced": {
-            "name": "고급 설정",
-            "data": {
-              "scan_interval": "업데이트 간격"
-            },
-            "data_description": {
-              "scan_interval": "기본 90초, 설정 범위 30~600초입니다. 간격을 줄여도 카카오맵 원본 정보가 더 자주 바뀌는 것은 아닙니다."
-            }
           }
         }
       }
@@ -85,7 +105,8 @@
       "invalid_time": "시작 시간과 종료 시간을 올바르게 입력하세요.",
       "equal_pause_times": "시작 시간과 종료 시간을 다르게 설정하세요. 하루 종일 업데이트하려면 일시 중지를 끄세요.",
       "invalid_interval": "업데이트 간격은 30~600 사이의 정수로 입력하세요.",
-      "invalid_bus": "목록에 있는 버스를 선택하세요."
+      "invalid_bus": "목록에 있는 버스를 선택하세요.",
+      "invalid_polling_mode": "적응형 또는 고정 간격을 선택하세요."
     }
   },
   "entity": {
@@ -96,7 +117,16 @@
           "live": "도착 정보 확인됨",
           "no_arrival": "도착 정보 없음",
           "paused": "업데이트 일시 중지",
-          "connection_lost": "연결 끊김"
+          "connection_lost": "연결 끊김",
+          "expired": "도착 예상 시간 만료",
+          "rate_limited": "요청이 일시적으로 제한됨",
+          "invalid_stop": "정류장 정보를 확인해야 함",
+          "ambiguous_route": "노선 이름이 겹침"
+        },
+        "state_attributes": {
+          "retry_at": {
+            "name": "다음 요청 가능 시각"
+          }
         }
       }
     }

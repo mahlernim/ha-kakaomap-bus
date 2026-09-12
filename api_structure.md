@@ -1,42 +1,48 @@
 # KakaoMap Bus API Structure
 
-This document outlines the JSON structure returned by the KakaoMap Bus Arrival API.
+This document describes the observed JSON shape used by the integration. It is not a published Kakao developer API contract.
 
 ## Endpoint
+
 `https://map.kakao.com/bus/stop.json?busstopid={STOP_ID}`
 
-## Root Object
+## Root object
+
 | Key | Type | Description |
-| :--- | :--- | :--- |
-| `id` | String | Unique identifier for the bus stop. |
-| `name` | String | Human-readable name of the bus stop (e.g., "수정역"). |
-| `hname1` | String | City name (e.g., "부산"). |
-| `direction` | String | The direction the buses are heading. |
+| --- | --- | --- |
+| `id` | String | Bus stop identifier. The integration requires it to match the configured stop ID. A missing or mismatched value is an invalid response. |
+| `name` | String | Stop name, for example `수정역`. |
+| `hname1` | String | City name, for example `부산`. |
+| `direction` | String | Direction associated with the stop. |
 | `realTime` | Boolean | Whether real-time data is available. |
-| `lines` | Array | List of bus routes (lines) served at this stop. |
+| `lines` | Array | Routes served at the stop. |
 
-## Line (Bus Route) Object
-Each item in the `lines` array contains:
+## Line object
+
+Each item in `lines` represents a bus route.
+
 | Key | Type | Description |
-| :--- | :--- | :--- |
-| `id` | String | Internal ID for the bus route (e.g., "B9082"). |
-| `name` | String | Bus route number/name (e.g., "126"). |
-| `busLineType` | String | Type of bus (e.g., "GENERAL", "MAUL"). |
-| `arrival` | Object | Detailed arrival information for the next bus. |
+| --- | --- | --- |
+| `id` | String | Internal KakaoMap route identifier. The current integration preserves identity by configured stop ID and route name. It does not migrate existing entities to route-ID identity. |
+| `name` | String | Route number or name, for example `126`. Duplicate route names are ambiguous and are not used for a route selection or arrival sensor. |
+| `busLineType` | String | Route type, for example `GENERAL` or `MAUL`. |
+| `arrival` | Object | Arrival details for the first and second bus. |
 
-## Arrival Object
+## Arrival object
+
 | Key | Type | Description |
-| :--- | :--- | :--- |
-| `arrivalTime` | Number | Seconds until the next bus arrives. Zero or missing values do not provide a usable estimate. |
-| `busStopCount` | Integer | Number of stops remaining until arrival. |
-| `arrivalTime2` | Integer | Seconds until the second following bus arrives. |
-| `busStopCount2` | Integer | Number of stops remaining for the second bus. |
-| `direction` | String | Descriptive direction (e.g., "수정역 방향"). |
-| `nextBusStopName` | String | The name of the next stop. |
-| `vehicleType` | String | Type of vehicle (e.g., "0" for general). |
-| `collectStatus` | String | Status of data collection (e.g., "NORMAL"). |
+| --- | --- | --- |
+| `arrivalTime` | Number | Seconds until the first bus arrives. A positive finite number is a usable estimate. |
+| `busStopCount` | Integer | Stops remaining until the first bus arrives. |
+| `arrivalTime2` | Number | Seconds until the second bus arrives. |
+| `busStopCount2` | Integer | Stops remaining until the second bus arrives. |
+| `direction` | String | Route direction, for example `수정역 방향`. |
+| `nextBusStopName` | String | Name of the next stop. |
+| `vehicleType` | String | Vehicle type, for example `0` for general. |
+| `collectStatus` | String | Upstream collection status, for example `NORMAL`. |
 
-## Example Response Snippet
+## Example response
+
 ```json
 {
   "id": "BS97660",
@@ -56,11 +62,14 @@ Each item in the `lines` array contains:
 }
 ```
 
-## Integration Logic
-- **Refresh interval**: 90 seconds by default; configurable from 30 to 600 seconds. Scheduled pauses suppress requests and clear arrival values.
-- **Sensor Mapping**: Each `line` in the `lines` array should map to a sensor entity in Home Assistant.
-- **State**: Valid positive seconds divided by 60, rounded to minutes. Missing or invalid values produce unknown; request failures produce unavailable. Second-arrival values are cleared when the first arrival is not current.
-- **Validation**: Null objects, booleans, strings, negative values, and nonfinite values are not arrival estimates. Malformed routes are isolated when possible.
-- **Status**: Each selected route also has an enum sensor for `live`, `no_arrival`, `paused`, and `connection_lost`, localized by Home Assistant.
-- **Identity**: Existing arrival unique IDs remain `kakaobus_{stop_id}_{bus_name}`. Status IDs use `kakaobus_status_{stop_id}_{bus_name}`. Same-name route collisions remain unsupported.
-- **Scope**: This describes an unofficial website endpoint, not a published Kakao developer API contract. Fields can change.
+## Integration behavior
+
+- **Polling**. Adaptive polling is the default for new and migrated entries. The integration requests every 30 seconds when any enabled selected route has a valid first arrival within three minutes. It requests every 120 seconds otherwise. Fixed polling remains selectable from 30 to 600 seconds, with a prior saved fixed interval retained during the one-time adaptive migration.
+- **Local countdown**. After a successful response, first and second estimates count down locally. When the first estimate reaches expiry, the integration clears both estimates and reports `expired`. It never automatically promotes the second estimate. Local updates do not change `last_success` or schedule a network request.
+- **Polling controls**. Quiet hours and disabled automatic polling prevent automatic requests. Local countdown continues while automatic polling is disabled. Requests do not overlap or catch up in bursts. A rate-limit deadline is honored before scheduled or manual requests.
+- **Rate limits and failures**. HTTP `Retry-After` integer delays and HTTP dates are accepted when representable. Malformed or unrepresentable values use a 60-second fallback. `retry_at` is the earliest eligible request time, not a service-recovery guarantee. Bounded immediate retries apply to retryable API failures. Exhausted non-rate-limit failures use scheduled backoff from 120 seconds, doubling to a 15-minute maximum and resetting after success.
+- **Validation**. Missing, boolean, string, negative, or nonfinite arrival values are not usable estimates. Malformed routes are isolated where possible. A missing or mismatched root `id` produces a retryable `invalid_stop` response, preserves `last_success`, and suppresses arrival values.
+- **Route ambiguity**. Duplicate route names are detected before route choices are built. Ambiguous names are excluded during setup and report `ambiguous_route` for existing affected routes. Other routes continue independently.
+- **Status**. Selected routes report `live`, `no_arrival`, `paused`, `connection_lost`, `expired`, `rate_limited`, `invalid_stop`, or `ambiguous_route`. Status precedence is scheduled pause, current request failure, route ambiguity, expired estimate, then live or no arrival information.
+- **Identity and metadata**. Arrival unique IDs remain `kakaobus_{stop_id}_{bus_name}`. Status IDs remain `kakaobus_status_{stop_id}_{bus_name}`. Reconfiguring the same stop can refresh its metadata without changing identity. A different physical stop requires a separate entry.
+- **Scope**. The endpoint and its fields can change without notice. Adaptive polling changes only this integration's request cadence and does not establish a fresher or more accurate upstream KakaoMap feed.
